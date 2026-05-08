@@ -1,0 +1,1241 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>医疗文档检索算法设计方案 v0.1</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --panel: #ffffff;
+      --text: #222725;
+      --muted: #66706b;
+      --line: #d9ddd8;
+      --accent: #256f5d;
+      --accent-soft: #e5f1ed;
+      --code-bg: #f0f2ef;
+      --shadow: 0 8px 24px rgba(33, 40, 36, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(247, 247, 244, 0.92);
+      backdrop-filter: blur(12px);
+    }
+
+    .header-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .preface,
+    details.section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .preface {
+      padding: 20px 22px;
+    }
+
+    summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 20px;
+      font-weight: 700;
+      color: var(--text);
+      border-bottom: 1px solid transparent;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary::before {
+      content: "+";
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      flex: 0 0 24px;
+    }
+
+    details[open] > summary {
+      border-bottom-color: var(--line);
+    }
+
+    details[open] > summary::before {
+      content: "-";
+    }
+
+    .subsection {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 12px 0;
+      background: #fbfcfb;
+    }
+
+    .subsection > summary {
+      padding: 12px 14px;
+      font-weight: 650;
+    }
+
+    .subsection .section-body {
+      padding: 12px 16px 16px;
+    }
+
+    .section-body {
+      padding: 18px 22px 22px;
+    }
+
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 14px 24px; padding: 0; }
+    li { margin: 4px 0; }
+    blockquote {
+      margin: 0 0 14px;
+      padding: 10px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      color: #243a34;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      overflow: auto;
+      background: #18201d;
+      color: #edf4ef;
+      border-radius: 8px;
+      line-height: 1.5;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 0 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 620px;
+      background: var(--panel);
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent-soft);
+      font-weight: 700;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    a { color: var(--accent); }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+
+    @media (max-width: 760px) {
+      .header-inner {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      main {
+        padding: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>医疗文档检索算法设计方案 v0.1</h1>
+        <div class="meta">HTML design document</div>
+      </div>
+      <div class="controls">
+        <button type="button" id="expandAll">展开全部</button>
+        <button type="button" id="collapseAll">收起全部</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="preface">
+      <blockquote>目标读者：team 内部<br>状态：草稿（待评审）<br>范围：定义 medical-agent 的索引与检索算法、数据模型、evaluation 框架</blockquote>
+<hr>
+    </section>
+    
+    <details class="section" open>
+      <summary><span>1. 目标与非目标</span></summary>
+      <div class="section-body">
+        
+        
+        <details class="subsection">
+          <summary><span>1.1 目标</span></summary>
+          <div class="section-body"><ul>
+<li>在 ~10 万份中文医疗文档（指南 / 共识 / 临床路径 / RCT 论文 / 教材章节）上构建可用于 <strong>临床诊断辅助</strong> 的检索系统。</li>
+<li>优化指标顺序：<strong>临床安全性 &gt; 引用可追溯性 &gt; 答案准确率 &gt; 召回率 &gt; 延迟 &gt; 成本</strong>。</li>
+<li>检索结果必须满足：每条进入 LLM 的临床声明都能精确回标到原文段落（含 doc_id / page / bbox / span）。</li>
+<li>索引策略层可独立替换、独立评测，便于 ablation。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>1.2 非目标</span></summary>
+          <div class="section-body"><ul>
+<li>不追求&quot;开放医疗诊断 100% 准确率&quot;——这是问题性质决定的不可达上限。我们追求 <strong>受限场景（疾病已知 / 决策树封闭）下错答率 &lt; 1% + 不确定时显式 abstain</strong>。</li>
+<li>不内化知识：LLM 不重写指南，只在原文段落基础上做组合与引用。</li>
+<li>不做病历存储 / EMR 集成；这些在上游 Agent 层处理。</li>
+<li>不做实时 streaming 索引；按批处理设计。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>1.3 设计原则</span></summary>
+          <div class="section-body"><ul>
+<li><strong>原文不动</strong>：解析产物保留页码、bbox、原始字符 offset，所有 EvidenceUnit 都能反查原文。</li>
+<li><strong>分层解耦</strong>：解析 / chunking / 索引 / 检索 / 重排 / 证据聚合 / 回标校验，每层独立模块、独立 metric。</li>
+<li><strong>结构优先</strong>：先抽出文档的结构化骨架（章节、推荐意见、表格、引用），再做向量化。</li>
+<li><strong>abstain over hallucination</strong>：检索置信度低于阈值时直接拒答，不让 LLM 兜底。</li>
+</ul>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section" open>
+      <summary><span>2. 总体架构</span></summary>
+      <div class="section-body">
+        <pre><code>                       ┌──────────────────────────────────────────┐
+                       │        Offline / Batch Pipeline           │
+                       └──────────────────────────────────────────┘
+
+  raw/*.pdf  ──►  Parser  ──►  Document  ──►  UnitExtractor  ──►  Indexer
+                  (MinerU)     (schema.py)    (3-level)     (BM25 +
+                                                              dense +
+                                                              sparse +
+                                                              metadata)
+                                                                 │
+                                                                 ▼
+                                                          Index Stores
+                                                          (FAISS / SQLite /
+                                                           ES-lite / KG)
+
+                       ┌──────────────────────────────────────────┐
+                       │            Online / Query Pipeline        │
+                       └──────────────────────────────────────────┘
+
+  user query
+       │
+       ▼
+  Query Rewriter ──► Multi-Route Retrieval ──► RRF Fusion ──► Reranker
+  (LLM, 同义词扩展)   (BM25 / dense / sparse                  (cross-encoder)
+                       + metadata filter)                          │
+                                                                   ▼
+                                                          Evidence Aggregator
+                                                                   │
+                                                                   ▼
+                                                            Answer Composer
+                                                            (LLM + 强制 citation)
+                                                                   │
+                                                                   ▼
+                                                          Citation Verifier
+                                                          (回标失败 → 丢弃声明)
+                                                                   │
+                                                                   ▼
+                                                          final answer + cites</code></pre>
+<hr>
+        
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>3. 数据模型</span></summary>
+      <div class="section-body">
+        <p>所有解析产物落地为 JSONL，便于版本化与 diff。schema 定义在 <code>src/medical_agent/schema/</code>，用 pydantic 强约束。</p>
+        
+        <details class="subsection">
+          <summary><span>3.1 <code>Document</code></span></summary>
+          <div class="section-body"><p>一份原始文档（PDF / DOCX / HTML 解析后的根对象）。</p>
+<pre><code class="language-python">class Document(BaseModel):
+    doc_id: str                       # 稳定哈希: sha256(source_path + content)[:16]
+    source_path: str                  # raw/2022-丙型肝炎防治指南.pdf
+    title: str
+    authors: list[str] = []
+    publisher: str | None             # 中华医学会 / NEJM / ...
+    publication_date: date | None
+    version: str | None               # &quot;2022年版&quot;
+    doc_type: Literal[&quot;guideline&quot;, &quot;consensus&quot;, &quot;rct&quot;, &quot;review&quot;, &quot;pathway&quot;, &quot;textbook&quot;]
+    language: str = &quot;zh&quot;
+    diseases: list[str] = []          # ICD-10 codes + 中文标签 (后处理填)
+    evidence_system: Literal[&quot;GRADE&quot;, &quot;Oxford&quot;, &quot;AHA&quot;, &quot;none&quot;] = &quot;none&quot;
+    target_population: list[str] = [] # [&quot;成人&quot;, &quot;孕妇&quot;] 等
+    sections: list[Section]
+    tables: list[Table]
+    figures: list[Figure]
+    recommendations: list[Recommendation]
+    references: list[Reference]
+    raw_markdown_path: str            # MinerU 输出的 .md 路径
+    parse_meta: ParseMeta              # 解析器版本、时间戳、警告</code></pre></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>3.2 <code>Section</code></span></summary>
+          <div class="section-body"><p>章节，递归结构。保留 page 范围与字符 span，使任何 EvidenceUnit 都能回到原文。</p>
+<pre><code class="language-python">class Section(BaseModel):
+    section_id: str                   # doc_id + path hash
+    path: list[str]                   # [&quot;治疗&quot;, &quot;DAA 方案&quot;, &quot;基因 1b 型&quot;]
+    level: int                        # 1, 2, 3...
+    title: str
+    text: str                         # 该节正文（不含子节），保留 markdown
+    page_start: int
+    page_end: int
+    char_span: tuple[int, int]        # 在 raw_markdown 中的字符 offset
+    children: list[Section] = []
+    table_refs: list[str] = []        # 引用的 table_id
+    figure_refs: list[str] = []</code></pre></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>3.3 <code>Recommendation</code></span></summary>
+          <div class="section-body"><p><strong>推荐意见</strong> 是医学指南最关键的语义单位，独立成实体。</p>
+<pre><code class="language-python">class Recommendation(BaseModel):
+    rec_id: str
+    doc_id: str
+    section_id: str                   # 所在章节
+    number: str | None                # &quot;推荐意见 7&quot;
+    statement: str                    # 推荐意见原文 (不改写)
+    evidence_grade: str | None        # &quot;A1&quot;, &quot;B2&quot;, &quot;1A&quot;
+    recommendation_strength: str | None  # &quot;强推荐&quot;, &quot;弱推荐&quot;
+    evidence_system: str | None       # &quot;GRADE&quot; 等
+    population: str | None            # &quot;基因 3b 型代偿期肝硬化&quot;
+    intervention: str | None          # &quot;索磷布韦/维帕他韦 + 利巴韦林&quot;
+    comparator: str | None
+    outcome: str | None
+    contraindications: list[str] = []
+    page: int
+    bbox: tuple[float, float, float, float] | None
+    surrounding_context: str          # 推荐意见前后各 N 字的论证文本
+    cited_refs: list[str] = []        # 引用的文献 ref_id</code></pre></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>3.4 <code>Table</code>, <code>Figure</code>, <code>Reference</code></span></summary>
+          <div class="section-body"><ul>
+<li><code>Table.cells: list[Cell]</code>，每个 cell 带 row/col header（<strong>不 flatten 成纯文本</strong>）。</li>
+<li><code>Figure</code> 至少存 caption + OCR 文本；流程图可后续接 VLM 抽 caption。</li>
+<li><code>Reference.ref_id</code> 用于 <code>Recommendation.cited_refs</code> 反向连接。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>3.5 <code>EvidenceUnit</code></span></summary>
+          <div class="section-body"><p>最小证据单元。系统的客观层级是三层：<code>Document -&gt; Section -&gt; EvidenceUnit</code>。 <code>paragraph</code>、<code>table_row</code>、<code>recommendation</code>、<code>diagnostic_rule</code> 都是 EvidenceUnit 的不同类型，而不是互相嵌套的层级。</p>
+<pre><code class="language-python">class EvidenceUnit(BaseModel):
+    unit_id: str
+    doc_id: str
+    section_id: str
+    unit_type: Literal[&quot;paragraph&quot;, &quot;table&quot;, &quot;table_row&quot;, &quot;recommendation&quot;, &quot;diagnostic_rule&quot;]
+    text: str                         # 用于 embedding 与 BM25 的内容
+    display_text: str                 # 给 LLM 的内容（可比 text 长，含必要上下文）
+    metadata: EvidenceMetadata        # disease, year, evidence_grade, page...
+    span_refs: list[SpanRef]          # 回标用的 (doc_id, page, char_span)
+    embeddings: dict[str, list[float]] = {}  # 索引时填，runtime 不传</code></pre>
+<p>路由索引中的 <code>doc_summary</code> 与 <code>section_summary</code> 是 Document / Section 的检索投影，不是独立层级。</p>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>4. 解析层（Parsing）</span></summary>
+      <div class="section-body">
+        
+        
+        <details class="subsection">
+          <summary><span>4.1 主解析器：MinerU</span></summary>
+          <div class="section-body"><ul>
+<li>输入：PDF；输出：Markdown + tables(JSON) + figures(PNG + caption)。</li>
+<li>选择理由：中文文档 layout / 公式 / 表格综合表现最好；支持 GPU 加速；MIT 协议。</li>
+<li>集成方式：subprocess 调用 <code>mineru</code> CLI 而非 import 库，隔离 Python 依赖冲突；解析产物落 <code>data/parsed/&lt;doc_id&gt;/</code>。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>4.2 fallback：PyMuPDF + 规则</span></summary>
+          <div class="section-body"><ul>
+<li>当 MinerU 解析失败 / 超时时，退化为 PyMuPDF 抽文本 + camelot 抽表格。</li>
+<li>规则不追求高质量，只保证 pipeline 不阻塞。失败的文档进入 <code>data/parse_failures.jsonl</code> 待人工处理。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>4.3 后处理（structure extraction）</span></summary>
+          <div class="section-body"><p>解析后由 <code>parsing/post.py</code> 提取结构化对象：</p>
+<ol>
+<li><strong>章节切分</strong>：基于 markdown heading + 中文章节正则（<code>^第[一二三四五六七八九十]+[章节]</code>、<code>^\d+(\.\d+)*\s+</code>）。</li>
+<li><strong>推荐意见抽取</strong>：正则 + LLM 判别。规则覆盖 <code>推荐意见\s*\d+</code>、<code>推荐\s*[:：]</code>、<code>Recommendation \d+</code> 等。证据等级用 <code>\(([A-D]\d?|[1-5][a-c]?)\)</code> 抓取后归一化到统一 enum。</li>
+<li><strong>表格规范化</strong>：MinerU 输出的 HTML/JSON 表格 → 我方 <code>Table</code> 模型；保留 row/col header；跨页表格按 caption 合并。</li>
+<li><strong>引用解析</strong>：参考文献节用规则切，每条用 <code>pyalex</code> / <code>crossref</code> / <code>regex</code> 抽 (作者, 年份, 期刊, DOI)。</li>
+<li><strong>元数据补全</strong>：<code>disease</code>, <code>target_population</code> 等用 LLM 在 doc 摘要 + 标题上抽，归一化到 CMeKG（见 §6）。</li>
+</ol></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>4.4 解析质量门</span></summary>
+          <div class="section-body"><p>每份文档输出 <code>parse_quality.json</code>：</p>
+<ul>
+<li><code>text_coverage</code>：抽出文本字符数 / PDF 总字符数（PyMuPDF 估算）</li>
+<li><code>table_count</code> / <code>table_extraction_rate</code></li>
+<li><code>recommendation_count</code></li>
+<li><code>heading_consistency</code>（章节层级是否单调）</li>
+<li><code>warnings: list[str]</code></li>
+</ul>
+<p>低于阈值的文档标 <code>quality=low</code> 但仍进索引（带 metadata 标志，检索时降权）。</p>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>5. 三层组织与多类型证据单元</span></summary>
+      <div class="section-body">
+        <p>这是本期重点验证的策略之一。设计上是 <strong>三层组织结构 + 证据单元类型化 + overlap by structure</strong>，不按字符数硬切。</p>
+        
+        <details class="subsection">
+          <summary><span>5.1 三层组织结构</span></summary>
+          <div class="section-body"><div class="table-wrap"><table>
+<thead><tr>
+<th style="text-align:left">层级</th>
+<th style="text-align:left">检索投影</th>
+<th style="text-align:left">用途</th>
+<th style="text-align:left">何时召回</th>
+</tr></thead><tbody>
+<tr>
+<td style="text-align:left"><code>Document</code></td>
+<td style="text-align:left"><code>doc_summary</code></td>
+<td style="text-align:left">路由 / 粗筛，包含标题、摘要、病种、版本</td>
+<td style="text-align:left">第一阶段 routing，决定查哪些文档</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>Section</code></td>
+<td style="text-align:left"><code>section_summary</code></td>
+<td style="text-align:left">章节路由，定位诊断、治疗、筛查、随访等章节</td>
+<td style="text-align:left">第二阶段 routing，决定查哪些章节</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>EvidenceUnit</code></td>
+<td style="text-align:left">按 <code>unit_type</code> 索引</td>
+<td style="text-align:left">原文证据，包含普通段落、表格、推荐意见、诊断规则</td>
+<td style="text-align:left">最终召回，进入 rerank / LLM / citation verifier</td>
+</tr>
+</tbody></table></div></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>5.2 EvidenceUnit 类型</span></summary>
+          <div class="section-body"><div class="table-wrap"><table>
+<thead><tr>
+<th style="text-align:left">类型</th>
+<th style="text-align:left">来源</th>
+<th style="text-align:left">字符数（中文）</th>
+<th style="text-align:left">用途</th>
+</tr></thead><tbody>
+<tr>
+<td style="text-align:left"><code>paragraph</code></td>
+<td style="text-align:left">章节正文段落</td>
+<td style="text-align:left">300–800</td>
+<td style="text-align:left">普通原文证据</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>table</code></td>
+<td style="text-align:left">完整表格</td>
+<td style="text-align:left">可较长</td>
+<td style="text-align:left">给 LLM 展示完整决策表</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>table_row</code></td>
+<td style="text-align:left">表格单行 + 表头</td>
+<td style="text-align:left">80–300</td>
+<td style="text-align:left">精确命中表格规则</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>recommendation</code></td>
+<td style="text-align:left">指南推荐意见</td>
+<td style="text-align:left">80–300</td>
+<td style="text-align:left">强证据，检索时提权</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>diagnostic_rule</code></td>
+<td style="text-align:left">诊断标准 / 风险分层规则</td>
+<td style="text-align:left">80–300</td>
+<td style="text-align:left">规则匹配与可解释诊断</td>
+</tr>
+</tbody></table></div></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>5.3 切分规则</span></summary>
+          <div class="section-body"><ul>
+<li><strong>Document 投影</strong>：title + 自动摘要（LLM 在 sections[0:3] 上生成 ≤300 字摘要，避免随机抽段）。</li>
+<li><strong>Section 投影</strong>：每个 Section 生成 <code>section_summary</code>；长章节仍保留章节对象本身，但不直接把整章作为最终证据。</li>
+<li><strong>paragraph EvidenceUnit</strong>：以 §3.2 的 <code>Section</code> 为边界；若正文过长，按子段落（<code>\n\n</code> + 句号）切，<strong>保留 path 前缀作为上下文头</strong>（&quot;治疗 &gt; DAA 方案 &gt; 基因 1b 型：……&quot;），相邻 EvidenceUnit 重叠 1 句。</li>
+<li><strong>recommendation EvidenceUnit</strong>：<code>statement</code> + <code>surrounding_context</code>（前 N 句论证 + 后 N 句条件说明），强制单独成 EvidenceUnit。元数据 <code>unit_type=recommendation</code>，检索时可单路提权。</li>
+<li><strong>diagnostic_rule EvidenceUnit</strong>：从诊断标准、风险分层、排除条件、检查阈值中抽取，绑定结构化 <code>condition</code> 与原文 <code>quote</code>。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>5.4 display_text vs text</span></summary>
+          <div class="section-body"><ul>
+<li><code>text</code>：纯净的检索文本，参与 embedding / BM25。不含 path 前缀以避免噪声。</li>
+<li><code>display_text</code>：给 LLM 看的版本，包含 path 前缀 + parent section 摘要 + 表格引用展开。</li>
+<li>二者分离让 retrieval 信号干净，LLM 上下文丰富。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>5.5 表格 EvidenceUnit（特例）</span></summary>
+          <div class="section-body"><ul>
+<li>大表（&gt;10 行）按 row 切：每行 + col header → 一个 <code>table_row</code> EvidenceUnit。</li>
+<li>表整体也存一个 <code>table</code> EvidenceUnit，<code>display_text</code> 是完整 markdown 表格。</li>
+<li>这样既能精确召回&quot;基因 3b 型 + 代偿期肝硬化 → 索磷布韦/维帕他韦 + 利巴韦林 12 周&quot;这种 row-level 命中，又能在 LLM 端拿到完整决策表。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>5.6 反例（明确不做）</span></summary>
+          <div class="section-body"><ul>
+<li>不做固定 512 / 1024 token 切分。</li>
+<li>不做语义无关的 sliding window。</li>
+<li>不让普通段落切分边界穿越 <code>Recommendation</code> 实体。</li>
+</ul>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>6. 索引层</span></summary>
+      <div class="section-body">
+        
+        
+        <details class="subsection">
+          <summary><span>6.1 多路索引设计</span></summary>
+          <div class="section-body"><div class="table-wrap"><table>
+<thead><tr>
+<th style="text-align:left">索引</th>
+<th style="text-align:left">引擎</th>
+<th style="text-align:left">内容</th>
+<th style="text-align:left">用途</th>
+</tr></thead><tbody>
+<tr>
+<td style="text-align:left">BM25</td>
+<td style="text-align:left">SQLite FTS5 起步，1M 文档前迁 ES</td>
+<td style="text-align:left"><code>evidence_unit.text</code> + 医学分词词典</td>
+<td style="text-align:left">术语精确匹配（&quot;HCV 基因 3b 型&quot;）</td>
+</tr>
+<tr>
+<td style="text-align:left">Dense</td>
+<td style="text-align:left">FAISS（IVF-PQ）→ Milvus</td>
+<td style="text-align:left">bge-m3 dense (1024 dim)</td>
+<td style="text-align:left">语义召回</td>
+</tr>
+<tr>
+<td style="text-align:left">Sparse</td>
+<td style="text-align:left">同 BM25 引擎复用，存 bge-m3 sparse 输出</td>
+<td style="text-align:left">bge-m3 sparse</td>
+<td style="text-align:left">学习型术语扩展（&quot;HCC↔肝细胞癌&quot;）</td>
+</tr>
+<tr>
+<td style="text-align:left">Metadata</td>
+<td style="text-align:left">SQLite / Postgres</td>
+<td style="text-align:left">全部 EvidenceMetadata 字段</td>
+<td style="text-align:left">必经过滤层</td>
+</tr>
+<tr>
+<td style="text-align:left">KG（可选 v0.2）</td>
+<td style="text-align:left">NetworkX 起步，量大后 Neo4j</td>
+<td style="text-align:left">实体-关系图</td>
+<td style="text-align:left">多跳推理 / disease→guideline 路由</td>
+</tr>
+</tbody></table></div></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>6.2 中文医学分词</span></summary>
+          <div class="section-body"><ul>
+<li>jieba + 自定义词典（合并 CMeKG / ICD-10 / 药品通用名）</li>
+<li>路径：<code>configs/medical_lexicon.txt</code>，每行 <code>术语\t权重\t词性</code>。</li>
+<li>同义词归一化（&quot;丙肝 / HCV / 丙型病毒性肝炎&quot; → CUI）由独立的 normalizer 模块处理，不污染 BM25 分词。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>6.3 必须索引的元数据字段（检索时必经 filter）</span></summary>
+          <div class="section-body"><ul>
+<li><code>publication_year</code>（旧版指南诊断时强制排除或显式标注）</li>
+<li><code>doc_type</code> / <code>evidence_system</code> / <code>evidence_grade</code></li>
+<li><code>diseases</code>（CMeKG 归一化 ID + 文本）</li>
+<li><code>target_population</code>（成人 / 儿童 / 孕妇 / 老年）</li>
+<li><code>version_replaced_by</code>（旧版指针）</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>6.4 索引构建流程</span></summary>
+          <div class="section-body"><pre><code>parsed Document  ──► unit extraction  ──► 并行：
+                                      ├─ embed dense (bge-m3 dense)
+                                      ├─ embed sparse (bge-m3 sparse)
+                                      ├─ build BM25 doc
+                                      └─ extract metadata + entities
+                                  ──► 落 4 个索引 + 1 张 evidence_units 主表</code></pre>
+<p>主表 <code>evidence_units</code> 是真相源，4 个索引都用 <code>unit_id</code> 做 join key。索引可独立重建。</p></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>6.5 实体归一化</span></summary>
+          <div class="section-body"><ul>
+<li>工具：<code>spacy</code> + CMeKG 词典 + 自训规则。v0.1 不上深度 NER，规则 + 词典覆盖 80% 即可。</li>
+<li>归一化映射存 <code>data/entity_map.parquet</code>，键为 surface form，值为 canonical CUI。</li>
+</ul>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>7. 检索流水线</span></summary>
+      <div class="section-body">
+        <p>核心原则：<strong>先路由，再取证</strong>。检索不是直接在全库 EvidenceUnit 上召回，而是按三层候选集逐步收窄：</p>
+<pre><code>Query
+  └─► Query Analysis
+        └─► Doc Routing        -&gt; candidate_doc_ids
+              └─► Section Routing   -&gt; candidate_section_ids
+                    └─► Evidence Retrieval -&gt; candidate_unit_ids
+                          └─► Rerank / Aggregate / Verify / Answer</code></pre>
+<p>每一层都只把候选 ID 传给下一层；下一层的检索必须带上上一层的候选集 filter。这样可以避免&quot;问题问丙肝，证据跑到胃癌指南&quot;这类跨文档误召回。</p>
+        
+        <details class="subsection">
+          <summary><span>7.1 Query analysis</span></summary>
+          <div class="section-body"><ul>
+<li>LLM（本地 7B 即可）做三件事：</li>
+</ul>
+<ol>
+<li>口语 → 医学术语（&quot;我得了丙肝&quot; → &quot;HCV / 丙型肝炎&quot;）</li>
+<li>同义词扩展（最多 5 个候选）</li>
+<li>抽出 query 中的实体并归一化（疾病 / 症状 / 药物 / 检查 / 人群条件）</li>
+</ol>
+<ul>
+<li>输出：</li>
+</ul>
+<pre><code class="language-json">{
+  &quot;normalized_query&quot;: &quot;HCV RNA阳性是否可诊断现症HCV感染&quot;,
+  &quot;expansions&quot;: [&quot;丙型肝炎病毒RNA&quot;, &quot;HCV感染&quot;, &quot;现症感染&quot;],
+  &quot;entities&quot;: [
+    {&quot;type&quot;: &quot;disease&quot;, &quot;text&quot;: &quot;丙型肝炎&quot;, &quot;cui&quot;: &quot;HCV&quot;},
+    {&quot;type&quot;: &quot;lab_test&quot;, &quot;text&quot;: &quot;HCV RNA&quot;}
+  ],
+  &quot;required_filters&quot;: {
+    &quot;diseases&quot;: [&quot;HCV&quot;],
+    &quot;target_population&quot;: [],
+    &quot;doc_type&quot;: [&quot;guideline&quot;, &quot;consensus&quot;],
+    &quot;publication_year_min&quot;: null,
+    &quot;prefer_latest&quot;: true
+  },
+  &quot;query_intent&quot;: &quot;diagnosis&quot;
+}</code></pre>
+<p>Filter 比如&quot;孕妇&quot;出现时强制 <code>target_population contains 孕妇</code>；&quot;儿童&quot;出现时强制匹配儿童人群或通用人群；如果 query 中明确指定年份/版本，则关闭 <code>prefer_latest</code>。</p></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.2 Doc routing：文档级候选集</span></summary>
+          <div class="section-body"><p>目标：从 10 万文档中选出少量可能相关的文档，输出 <code>candidate_doc_ids</code>。</p>
+<p>输入索引：</p>
+<ul>
+<li><code>doc_summary</code>：title + abstract + diseases + doc_type + version + publisher + target_population。</li>
+<li>文档元数据表：<code>publication_year</code>, <code>version_replaced_by</code>, <code>doc_type</code>, <code>diseases</code>, <code>target_population</code>, <code>authority_level</code>。</li>
+</ul>
+<p>流程：</p>
+<ol>
+<li>应用硬过滤：</li>
+</ol>
+<ul>
+<li><code>doc_type</code> 必须在 query 允许范围内；诊断类问题默认优先 <code>guideline / consensus / pathway</code>。</li>
+<li>若 query 识别出疾病，<code>diseases</code> 必须命中疾病或其上位类；无法识别疾病时不加 disease 硬过滤。</li>
+<li>若 query 识别人群（儿童、孕妇、老年），文档 <code>target_population</code> 必须匹配该人群或标为通用人群。</li>
+<li>默认排除 <code>version_replaced_by is not null</code> 的旧版指南；若新版本候选为空，才允许旧版进入并加 warning。</li>
+</ul>
+<ol>
+<li>在过滤后的文档集合上做多路召回：</li>
+</ol>
+<ul>
+<li>BM25：<code>normalized_query + expansions</code>，top 50。</li>
+<li>Dense：<code>normalized_query</code>，top 50。</li>
+<li>Sparse：<code>normalized_query</code>，top 50。</li>
+</ul>
+<ol>
+<li>RRF 融合，按 <code>authority_level</code>、<code>publication_year</code>、<code>doc_type</code> 做轻量加权。</li>
+<li>输出 top N 文档，默认 <code>N=8</code>。</li>
+</ol>
+<p>排除规则：</p>
+<ul>
+<li><code>doc_type=rct/review/textbook</code> 不用于直接诊断结论，除非 query 明确要求研究证据或指南不足。</li>
+<li>旧版指南被新版替代时默认排除，不和新版一起融合。</li>
+<li>如果 top 文档的 disease 与 query disease 冲突，直接丢弃。</li>
+</ul>
+<p>失败条件：</p>
+<ul>
+<li><code>candidate_doc_ids</code> 为空 → abstain，原因 <code>no_matching_document</code>。</li>
+<li>top1 doc score 低于阈值且没有明确疾病实体 → abstain，原因 <code>document_routing_low_confidence</code>。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.3 Section routing：章节级候选集</span></summary>
+          <div class="section-body"><p>目标：在候选文档内定位具体章节，输出 <code>candidate_section_ids</code>。</p>
+<p>输入索引：</p>
+<ul>
+<li><code>section_summary</code>：section path + section title + 自动摘要 + section intent tags。</li>
+<li>Section 元数据：<code>doc_id</code>, <code>path</code>, <code>page_start</code>, <code>page_end</code>, <code>section_intent</code>。</li>
+</ul>
+<p>流程：</p>
+<ol>
+<li>强制 filter：<code>doc_id in candidate_doc_ids</code>。</li>
+<li>根据 <code>query_intent</code> 加章节意图过滤或提权：</li>
+</ol>
+<ul>
+<li><code>diagnosis</code>：优先 <code>诊断 / 实验室检查 / 诊断标准 / 鉴别诊断 / 风险分层</code>。</li>
+<li><code>treatment</code>：优先 <code>治疗 / 推荐意见 / 用药 / 禁忌</code>。</li>
+<li><code>screening</code>：优先 <code>筛查 / 风险评估 / 早诊早治</code>。</li>
+</ul>
+<ol>
+<li>多路召回：</li>
+</ol>
+<ul>
+<li>BM25：section title/path/summary，top 50。</li>
+<li>Dense：section summary，top 50。</li>
+<li>Sparse：section summary，top 50。</li>
+</ul>
+<ol>
+<li>RRF 融合，并按 section intent 与 query intent 匹配度提权。</li>
+<li>输出 top M 章节，默认 <code>M=20</code>，并保留每个章节的 parent/child 邻接信息。</li>
+</ol>
+<p>排除规则：</p>
+<ul>
+<li>query 是诊断判断时，<code>参考文献 / 致谢 / 方法学 / 背景流行病学</code> 章节默认排除，除非没有其他章节命中。</li>
+<li>章节所在文档若已被 doc routing 标记为旧版降权，section 继承该 warning。</li>
+</ul>
+<p>失败条件：</p>
+<ul>
+<li><code>candidate_section_ids</code> 为空 → 回退到 candidate docs 内全文 EvidenceUnit 检索一次；仍为空则 abstain，原因 <code>no_matching_section</code>。</li>
+<li>top section 与 query_intent 严重不匹配，例如诊断问题只命中治疗章节 → 标 <code>section_intent_mismatch</code>，进入 evidence 阶段但提高 abstain 阈值。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.4 Evidence retrieval：证据单元召回</span></summary>
+          <div class="section-body"><p>目标：在候选章节内召回可引用的最小证据单元，输出 <code>candidate_unit_ids</code>。</p>
+<p>输入索引：</p>
+<ul>
+<li>EvidenceUnit 主表与索引：<code>paragraph / table / table_row / recommendation / diagnostic_rule</code>。</li>
+<li>元数据：<code>doc_id</code>, <code>section_id</code>, <code>unit_type</code>, <code>page</code>, <code>diseases</code>, <code>target_population</code>, <code>evidence_grade</code>, <code>sensitivity_level</code>。</li>
+</ul>
+<p>流程：</p>
+<ol>
+<li>强制 filter：</li>
+</ol>
+<ul>
+<li><code>section_id in candidate_section_ids</code>。</li>
+<li>若 query 有明确疾病/人群，EvidenceUnit 的 metadata 必须命中或继承自上级 Section/Document。</li>
+<li>默认排除 <code>quality=low</code> 的解析产物；若无结果再放开并加 warning。</li>
+</ul>
+<ol>
+<li>按 query intent 选择召回路：</li>
+</ol>
+<ul>
+<li><code>diagnosis</code>：<code>diagnostic_rule</code> 与 <code>recommendation</code> 提权，<code>paragraph/table_row</code> 参与补充。</li>
+<li><code>screening/risk</code>：<code>diagnostic_rule/table_row/recommendation</code> 提权。</li>
+<li><code>definition/background</code>：<code>paragraph</code> 提权。</li>
+</ul>
+<ol>
+<li>多路召回：</li>
+</ol>
+<ul>
+<li>BM25：<code>normalized_query + expansions</code>，top 80。</li>
+<li>Dense：<code>normalized_query</code>，top 80。</li>
+<li>Sparse：<code>normalized_query</code>，top 80。</li>
+<li>Rule lookup：若 query facts 能匹配 <code>diagnostic_rule.condition.required_facts</code>，直接加入候选。</li>
+</ul>
+<ol>
+<li>RRF 融合，并按 <code>unit_type</code> 加权：</li>
+</ol>
+<ul>
+<li><code>diagnostic_rule</code>: +强提权</li>
+<li><code>recommendation</code>: +提权</li>
+<li><code>table_row</code>: +中等提权</li>
+<li><code>paragraph</code>: 默认</li>
+<li><code>table</code>: 不直接作为 top evidence，除非其 row 命中或需要完整上下文。</li>
+</ul>
+<ol>
+<li>为命中的 EvidenceUnit 自动补充邻接上下文：</li>
+</ol>
+<ul>
+<li>paragraph 命中时，可带前后 1 个 paragraph 作为 <code>display_context</code>，但证据 ID 仍只指向原命中 unit。</li>
+<li>table_row 命中时，额外带完整 table 的 <code>display_text</code>。</li>
+<li>recommendation 命中时，带 <code>surrounding_context</code>。</li>
+</ul>
+<p>排除规则：</p>
+<ul>
+<li>EvidenceUnit 没有 <code>span_refs</code> 或无法回标页码时，不允许进入最终 evidence。</li>
+<li>与 query 人群冲突的 EvidenceUnit 直接排除，例如儿童问题命中成人专用推荐。</li>
+<li><code>diagnostic_rule</code> 的 required facts 与病例事实明显矛盾时，不作为支持证据，但可作为&quot;不满足项&quot;返回。</li>
+</ul>
+<p>失败条件：</p>
+<ul>
+<li><code>candidate_unit_ids</code> 为空 → abstain，原因 <code>no_matching_evidence</code>。</li>
+<li>命中结果都没有可回标 span → abstain，原因 <code>no_traceable_evidence</code>。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.5 Reranker</span></summary>
+          <div class="section-body"><ul>
+<li>bge-reranker-v2-m3，cross-encoder。</li>
+<li>输入 (query, evidence_unit.text)，输出 score。</li>
+<li>截断到 top 8（默认值，可调）。</li>
+<li>若 reranker top1 score &lt; threshold（待标定），整个 query 标 <code>low_confidence=True</code>。</li>
+<li>reranker 只在 <code>candidate_unit_ids</code> 内排序，不允许引入上一层未通过的文档或章节。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.6 Evidence Aggregation</span></summary>
+          <div class="section-body"><ul>
+<li>同一 <code>Recommendation</code> 的多个 EvidenceUnit 命中 → 合并为单个证据条目。</li>
+<li>不同文档对同一 (population, intervention) 的推荐若 <strong>结论冲突</strong>，<strong>保留两个独立证据条目并标 <code>conflicting=True</code></strong>，绝不自动合并。</li>
+<li>输出：<code>list[Evidence]</code>，每个 Evidence 含 statement, grade, sources（多个 EvidenceUnit）, conflict_with。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.7 Answer composition</span></summary>
+          <div class="section-body"><ul>
+<li>LLM prompt 强制 schema 输出，每条 <code>claim</code> 必须带 <code>evidence_ids: list[unit_id]</code>。</li>
+<li>prompt 模板：</li>
+<li>系统 prompt 限制不得引入 evidence 之外的临床事实</li>
+<li>few-shot 示例展示如何说&quot;证据不足，建议……&quot;</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.8 Citation Verifier（回标校验）</span></summary>
+          <div class="section-body"><ul>
+<li>对 LLM 输出的每个 <code>claim</code>：</li>
+</ul>
+<ol>
+<li>取声明文本 → embedding</li>
+<li>与该 claim 引用的 evidence 文本算 cosine sim</li>
+<li>若 sim &lt; 0.55（待标定）或 evidence_ids 为空 → <strong>丢弃此 claim</strong></li>
+</ol>
+<ul>
+<li>丢弃后若答案为空，整体回退到 <code>abstain</code> + 列出 top evidence 让用户自决。</li>
+<li>这是临床安全的最后一道闸。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>7.9 Abstain 策略</span></summary>
+          <div class="section-body"><p>触发任一条件即 abstain：</p>
+<ul>
+<li>query 改写 LLM 拒识 / 超出医学范畴</li>
+<li>Doc / Section / Evidence 任一层候选集为空且回退失败</li>
+<li>全部 evidence 召回路 top1 score 低于阈值</li>
+<li>检索结果证据系统冲突（指南互相矛盾）</li>
+<li>引用回标全部失败</li>
+</ul>
+<p>abstain 时返回结构化 reason，前端可决定是 escalate 给医生还是要求用户补全信息。</p>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>8. Evidence Chain 协议</span></summary>
+      <div class="section-body">
+        
+        
+        <details class="subsection">
+          <summary><span>8.1 SpanRef</span></summary>
+          <div class="section-body"><p>每个 EvidenceUnit 都携带 <code>span_refs: list[SpanRef]</code>：</p>
+<pre><code class="language-python">class SpanRef(BaseModel):
+    doc_id: str
+    page: int
+    char_span: tuple[int, int]        # 在 raw_markdown 中的 offset
+    bbox: tuple[float, float, float, float] | None  # 在 PDF 中的位置
+    quote: str                        # 实际文本（用于回标校验冗余存）</code></pre></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>8.2 引用 ID 规范</span></summary>
+          <div class="section-body"><ul>
+<li>对外暴露的 citation id 格式：<code>{doc_id}#sec={section_id}#rec={rec_id?}#p={page}</code></li>
+<li>解析端到端可逆：从 citation id 能反查到原 PDF 页面 + bbox。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>8.3 输出契约</span></summary>
+          <div class="section-body"><p>最终回答必须满足：</p>
+<pre><code class="language-json">{
+  &quot;answer&quot;: &quot;...&quot;,
+  &quot;claims&quot;: [
+    {&quot;text&quot;: &quot;...&quot;, &quot;evidence_ids&quot;: [&quot;...&quot;, &quot;...&quot;], &quot;confidence&quot;: 0.92}
+  ],
+  &quot;evidences&quot;: [
+    {&quot;id&quot;: &quot;...&quot;, &quot;doc_title&quot;: &quot;...&quot;, &quot;doc_year&quot;: 2022, &quot;quote&quot;: &quot;...&quot;, &quot;page&quot;: 12, &quot;bbox&quot;: [...]}
+  ],
+  &quot;abstain&quot;: false,
+  &quot;abstain_reason&quot;: null,
+  &quot;warnings&quot;: [&quot;旧版指南 (2019) 已被排除&quot;]
+}</code></pre>
+<p><strong>前端不允许显示没有 evidences 的 claim。</strong></p>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>9. 评测框架</span></summary>
+      <div class="section-body">
+        
+        
+        <details class="subsection">
+          <summary><span>9.1 评测集分层</span></summary>
+          <div class="section-body"><ul>
+<li><strong>L0 自动构造</strong>：从指南推荐意见反推 QA（已知答案 → 生成问题），用于回归测试。<strong>不作为发布门</strong>。</li>
+<li><strong>L1 临床场景集</strong>：医生标注，~200 条，覆盖：</li>
+<li>单一指南内决策（&quot;基因 1b 型初治非肝硬化首选方案&quot;）</li>
+<li>跨指南检索（&quot;妊娠合并丙肝是否能 DAA 治疗&quot;）</li>
+<li>冲突识别（同一问题两份指南推荐不同）</li>
+<li>abstain 触发（信息不足、超范围）</li>
+<li><strong>L2 红队集</strong>：医生 + 工程师设计的 adversarial 集，专门测幻觉、跨年份混淆、人群错配。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>9.2 指标</span></summary>
+          <div class="section-body"><ul>
+<li><strong>检索侧</strong>：Recall@k（k=5/10/20），nDCG@10，引用覆盖率（answer 中所有 claim 都有 evidence 的比例）。</li>
+<li><strong>答案侧</strong>：claim accuracy（医生评，每条 claim 对/错/不足以判断），abstain precision / recall，conflict detection F1。</li>
+<li><strong>安全侧</strong>：错答率（错答 = 有 claim 但与公认指南相反），临床危险错答数（独立计数）。</li>
+<li><strong>工程侧</strong>：p50 / p95 延迟，索引存储 / 内存占用。</li>
+</ul></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>9.3 Ablation 维度</span></summary>
+          <div class="section-body"><p>每条配置都用同一份 L1 集跑：</p>
+<ol>
+<li>evidence unit extraction：单粒度 section vs 多类型 EvidenceUnit（默认）</li>
+<li>检索路：仅 BM25 / 仅 dense / hybrid（默认）</li>
+<li>reranker on/off</li>
+<li>citation verifier on/off</li>
+<li>recommendation EvidenceUnit 提权 on/off</li>
+<li>metadata filter 严格度</li>
+</ol>
+<p>每次提交都打 <code>eval_report.json</code>，CI 上回归对比。</p></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>9.4 标定阈值</span></summary>
+          <div class="section-body"><ul>
+<li>reranker low_confidence threshold</li>
+<li>citation verifier sim threshold</li>
+<li>abstain 触发组合</li>
+</ul>
+<p>这些都不应硬编码，统一放 <code>configs/thresholds.yaml</code>，每次发布前在 L1 上重新标定。</p>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>10. 目录结构</span></summary>
+      <div class="section-body">
+        <pre><code>medical-agent/
+├── raw/                              # 原始 PDF（用户在维护）
+├── data/                             # gitignore
+│   ├── parsed/&lt;doc_id&gt;/              # MinerU 输出 + 后处理 JSON
+│   ├── evidence_units/&lt;doc_id&gt;.jsonl
+│   ├── entity_map.parquet
+│   ├── parse_failures.jsonl
+│   └── indices/                      # FAISS / SQLite / ES indices
+├── docs/
+│   └── design/
+│       └── retrieval-algorithm.html  # 本文
+├── configs/
+│   ├── default.yaml
+│   ├── thresholds.yaml
+│   └── medical_lexicon.txt
+├── src/medical_agent/
+│   ├── schema/                       # pydantic models
+│   │   ├── document.py
+│   │   ├── evidence_unit.py
+│   │   └── evidence.py
+│   ├── parsing/
+│   │   ├── mineru_runner.py
+│   │   ├── pymupdf_fallback.py
+│   │   ├── post.py                   # section/recommendation/table 抽取
+│   │   └── quality.py
+│   ├── evidence_units/
+│   │   ├── extractor.py
+│   │   └── table.py
+│   ├── indexing/
+│   │   ├── bm25.py
+│   │   ├── dense_faiss.py
+│   │   ├── sparse.py
+│   │   ├── metadata.py
+│   │   └── builder.py                # 编排 4 路索引
+│   ├── retrieval/
+│   │   ├── query_rewriter.py
+│   │   ├── multi_route.py
+│   │   ├── rrf.py
+│   │   ├── reranker.py
+│   │   ├── aggregator.py
+│   │   ├── citation_verifier.py
+│   │   └── abstain.py
+│   ├── eval/
+│   │   ├── datasets/                 # L0/L1/L2
+│   │   ├── metrics.py
+│   │   ├── runner.py
+│   │   └── report.py
+│   └── cli/
+│       ├── ingest.py                 # python -m medical_agent.cli.ingest raw/
+│       ├── query.py
+│       └── eval.py
+├── tests/
+│   ├── parsing/
+│   ├── chunking/
+│   └── retrieval/
+├── pyproject.toml
+└── README.md</code></pre>
+<hr>
+        
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>11. 实施路线图</span></summary>
+      <div class="section-body">
+        <div class="table-wrap"><table>
+<thead><tr>
+<th style="text-align:left">阶段</th>
+<th style="text-align:left">范围</th>
+<th style="text-align:left">出口标准</th>
+</tr></thead><tbody>
+<tr>
+<td style="text-align:left"><strong>M0：脚手架</strong></td>
+<td style="text-align:left">目录、pyproject、schema、CLI 占位</td>
+<td style="text-align:left"><code>python -m medical_agent.cli.ingest --help</code> 可跑</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M1：解析跑通</strong></td>
+<td style="text-align:left">MinerU 集成 + post-processing + parse_quality</td>
+<td style="text-align:left"><code>raw/</code> 下两份 PDF 完整解析为 <code>data/parsed/</code>；丙肝指南推荐意见数 ≥ 实际数的 90%</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M2：证据单元抽取</strong></td>
+<td style="text-align:left">§5 落地 + 单测</td>
+<td style="text-align:left">EvidenceUnit 数 / 长度分布 / 推荐意见命中率上 dashboard</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M3：单路检索 baseline</strong></td>
+<td style="text-align:left">仅 BM25，单粒度 section</td>
+<td style="text-align:left">在 L0 自动 QA 上 Recall@10 报告</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M4：混合检索 + 多粒度</strong></td>
+<td style="text-align:left">dense / sparse / RRF / 多粒度合并</td>
+<td style="text-align:left">在 L0 上 Recall@10 ≥ M3 + 10pp</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M5：reranker + evidence chain</strong></td>
+<td style="text-align:left">citation verifier + abstain</td>
+<td style="text-align:left">L1 集上引用覆盖率 ≥ 95%，错答率 &lt; 5%</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M6：评测闭环 + ablation</strong></td>
+<td style="text-align:left">eval CLI + 报告生成</td>
+<td style="text-align:left">每次 PR 跑 ablation，自动评论变化</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>M7：扩量</strong></td>
+<td style="text-align:left">加 1k / 10k 文档</td>
+<td style="text-align:left">索引大小、构建时间、p95 延迟符合预算</td>
+</tr>
+</tbody></table></div>
+<p>每阶段独立 PR，独立 metric，独立可回滚。</p>
+<hr>
+        
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>12. 已识别的风险与待决定事项</span></summary>
+      <div class="section-body">
+        
+        
+        <details class="subsection">
+          <summary><span>风险</span></summary>
+          <div class="section-body"><ol>
+<li><strong>MinerU 在某些指南上可能 OOM 或表格识别退化</strong>：mitigation 是 fallback 链 + parse_failures 队列。</li>
+<li><strong>bge-m3 在医学领域的 zero-shot 表现未知</strong>：M3 后必须在自建集上量化对比 BGE-M3 / Conan-embedding / PubMedBERT-zh。结果决定是否需要 LoRA。</li>
+<li><strong>临床冲突检测做不准会反向降低体验</strong>：M5 之前先做&quot;标识冲突，不自动合并&quot;，不做&quot;判定哪个对&quot;。</li>
+<li><strong>Citation verifier 的 sim 阈值与 LLM 偏好高度相关</strong>：每次换 LLM 必须重标。</li>
+<li><strong>数据合规</strong>：原始指南版权问题。M1 之前确认是否仅限内部使用。</li>
+</ol></div>
+        </details>
+
+        <details class="subsection">
+          <summary><span>待决定（需要业务输入）</span></summary>
+          <div class="section-body"><ul>
+<li>[ ] 检索时默认是否按&quot;最新版优先&quot;还是&quot;全部召回 + 警示&quot;？</li>
+<li>[ ] abstain 后端到端 UX：直接返回 vs 转人工？</li>
+<li>[ ] 是否需要支持非中文文献？（FDA / NEJM 等）</li>
+<li>[ ] LLM 选型：本地 vLLM (Qwen2.5-72B / DeepSeek-V3) vs API。涉及成本与合规。</li>
+<li>[ ] 是否给每条 EvidenceUnit 标&quot;诊断敏感度&quot;（用药剂量、禁忌、急救方案标 HIGH，背景介绍标 LOW）？检索时高敏度 EvidenceUnit 的回标更严格。</li>
+</ul>
+<hr></div>
+        </details>
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>13. 下一步</span></summary>
+      <div class="section-body">
+        <p>设计文档评审通过后：</p>
+<ol>
+<li>落 M0 脚手架（pyproject + schema + 目录）</li>
+<li>选 1 份 PDF（建议丙肝指南，结构更规整）做 M1 解析的 reference 实现</li>
+<li>同步搭 L0 自动评测集（用解析出的推荐意见反推 QA）</li>
+<li>M3 baseline 出第一个数字</li>
+</ol>
+<hr>
+        
+      </div>
+    </details>
+
+    <details class="section">
+      <summary><span>附录 A：与开源方案的关系</span></summary>
+      <div class="section-body">
+        <ul>
+<li><strong>DeepDoc (RAGFlow)</strong>：作为 MinerU 的备选解析器，仅在 §4 解析层借用。</li>
+<li><strong>Medical-Graph-RAG</strong>：第 6.5 节实体归一化 + 第 7 节多跳检索的设计借鉴其三层图思想。</li>
+<li><strong>WeKnora Wiki Mode</strong>：明确 <strong>不采用</strong>——医学场景不允许 LLM 改写知识。</li>
+<li><strong>bge-m3 / bge-reranker-v2-m3</strong>：直接当模型用，不依赖任何 RAG 框架。</li>
+</ul>
+        
+      </div>
+    </details>
+  </main>
+  <script>
+    const details = () => Array.from(document.querySelectorAll("details"));
+    document.getElementById("expandAll").addEventListener("click", () => {
+      details().forEach((item) => item.open = true);
+    });
+    document.getElementById("collapseAll").addEventListener("click", () => {
+      details().forEach((item) => item.open = false);
+    });
+  </script>
+</body>
+</html>
+
