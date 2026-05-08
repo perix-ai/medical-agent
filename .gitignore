@@ -1,0 +1,20 @@
+# Working artifacts (parsed PDFs, chunks, indices, logs)
+# Per docs/design/retrieval-algorithm.md §10
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
