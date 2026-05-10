@@ -385,9 +385,25 @@
         </details>
 
         <details class="subsection">
-          <summary><span>3.3 <code>Recommendation</code></span></summary>
-          <div class="section-body"><p><strong>推荐意见</strong> 是医学指南最关键的语义单位，独立成实体。</p>
-<pre><code class="language-python">class Recommendation(BaseModel):
+          <summary><span>3.3 临床结构化源实体：<code>Recommendation</code> / <code>DiagnosticRule</code></span></summary>
+          <div class="section-body"><p><strong>推荐意见</strong> 是解析层源实体，不是检索层级。它从指南原文中抽取，保留推荐原文、证据等级、推荐强度、人群条件、上下文和引用文献。检索时不会直接把 Recommendation 当作层级节点，而是由它生成一个或多个 <code>EvidenceUnit</code> 投影。</p>
+<pre><code class="language-python">class SourceEntity(BaseModel):
+    entity_id: str
+    doc_id: str
+    section_id: str | None
+    entity_type: Literal[
+        &quot;recommendation&quot;,
+        &quot;diagnostic_rule&quot;,
+        &quot;table&quot;,
+        &quot;figure&quot;,
+        &quot;reference&quot;
+    ]
+    page_start: int | None
+    page_end: int | None
+    span_refs: list[SpanRef] = []
+
+
+class Recommendation(SourceEntity):
     rec_id: str
     doc_id: str
     section_id: str                   # 所在章节
@@ -404,32 +420,102 @@
     page: int
     bbox: tuple[float, float, float, float] | None
     surrounding_context: str          # 推荐意见前后各 N 字的论证文本
-    cited_refs: list[str] = []        # 引用的文献 ref_id</code></pre></div>
+    cited_refs: list[str] = []        # 引用的文献 ref_id
+
+
+class DiagnosticRule(SourceEntity):
+    rule_id: str
+    condition: dict                   # 结构化条件表达式
+    conclusion: str
+    required_facts: list[str] = []
+    exclusion_facts: list[str] = []
+    source_quote: str                 # 规则对应的原文</code></pre>
+<p>投影关系：</p>
+<ul>
+<li><code>Recommendation</code> 和 <code>DiagnosticRule</code> 都是临床结构化源实体。</li>
+<li>它们不参与文档层级嵌套；它们通过 <code>section_id</code> 挂到所在章节。</li>
+<li>检索时由它们生成 <code>recommendation</code> 或 <code>diagnostic_rule</code> 类型的 EvidenceUnit。</li>
+</ul></div>
         </details>
 
         <details class="subsection">
-          <summary><span>3.4 <code>Table</code>, <code>Figure</code>, <code>Reference</code></span></summary>
-          <div class="section-body"><ul>
+          <summary><span>3.4 结构化源实体：<code>Table</code>, <code>Figure</code>, <code>Reference</code></span></summary>
+          <div class="section-body"><p>表格、图片和引文都按独立结构化实体建模。它们不是 EvidenceUnit 的附属字段；EvidenceUnit 只是引用这些源实体生成的检索投影。</p>
+<ul>
 <li><code>Table.cells: list[Cell]</code>，每个 cell 带 row/col header（<strong>不 flatten 成纯文本</strong>）。</li>
 <li><code>Figure</code> 至少存 caption + OCR 文本；流程图可后续接 VLM 抽 caption。</li>
 <li><code>Reference.ref_id</code> 用于 <code>Recommendation.cited_refs</code> 反向连接。</li>
+</ul>
+<pre><code class="language-python">class Table(SourceEntity):
+    table_id: str
+    caption: str | None
+    cells: list[Cell]
+    row_headers: list[str] = []
+    col_headers: list[str] = []
+
+
+class Figure(SourceEntity):
+    figure_id: str
+    caption: str | None
+    image_path: str | None
+    ocr_text: str | None
+
+
+class Reference(SourceEntity):
+    ref_id: str
+    raw_text: str
+    doi: str | None
+    title: str | None
+    journal: str | None
+    year: int | None</code></pre>
+<p>投影关系：</p>
+<ul>
+<li><code>Table</code> 可以生成完整表格 EvidenceUnit，也可以按行生成多个 table_row EvidenceUnit。</li>
+<li><code>Figure</code> 默认作为 display context；诊断流程图、风险分层图等可生成 diagnostic_rule EvidenceUnit。</li>
+<li><code>Reference</code> 默认不生成 EvidenceUnit，只参与证据链和引用关系。</li>
 </ul></div>
         </details>
 
         <details class="subsection">
           <summary><span>3.5 <code>EvidenceUnit</code></span></summary>
-          <div class="section-body"><p>最小证据单元。系统的客观层级是三层：<code>Document -&gt; Section -&gt; EvidenceUnit</code>。 <code>paragraph</code>、<code>table_row</code>、<code>recommendation</code>、<code>diagnostic_rule</code> 都是 EvidenceUnit 的不同类型，而不是互相嵌套的层级。</p>
+          <div class="section-body"><p><code>EvidenceUnit</code> 是检索层和引用层的最小证据单元。它可以来自正文段落，也可以来自任意结构化源实体。系统层级仍是三层：<code>Document -&gt; Section -&gt; EvidenceUnit</code>；结构化源实体是 EvidenceUnit 的来源，不是额外层级。</p>
+<pre><code>Document
+  └── Section
+        ├── section_text
+        ├── Recommendation / DiagnosticRule / Table / Figure / Reference  # 结构化源实体
+        └── EvidenceUnit                                                  # 检索投影
+              - paragraph
+              - recommendation
+              - diagnostic_rule
+              - table
+              - table_row
+              - figure_context</code></pre>
 <pre><code class="language-python">class EvidenceUnit(BaseModel):
     unit_id: str
     doc_id: str
     section_id: str
-    unit_type: Literal[&quot;paragraph&quot;, &quot;table&quot;, &quot;table_row&quot;, &quot;recommendation&quot;, &quot;diagnostic_rule&quot;]
+    unit_type: Literal[
+        &quot;paragraph&quot;,
+        &quot;recommendation&quot;,
+        &quot;diagnostic_rule&quot;,
+        &quot;table&quot;,
+        &quot;table_row&quot;,
+        &quot;figure_context&quot;
+    ]
+    source_entity_type: str | None     # recommendation / diagnostic_rule / table / figure / reference
+    source_entity_id: str | None       # rec_id / table_id / figure_id / ref_id
     text: str                         # 用于 embedding 与 BM25 的内容
     display_text: str                 # 给 LLM 的内容（可比 text 长，含必要上下文）
     metadata: EvidenceMetadata        # disease, year, evidence_grade, page...
     span_refs: list[SpanRef]          # 回标用的 (doc_id, page, char_span)
     embeddings: dict[str, list[float]] = {}  # 索引时填，runtime 不传</code></pre>
-<p>路由索引中的 <code>doc_summary</code> 与 <code>section_summary</code> 是 Document / Section 的检索投影，不是独立层级。</p>
+<p>约束：</p>
+<ul>
+<li><code>EvidenceUnit</code> 必须能通过 <code>source_entity_id</code> 或 <code>span_refs</code> 反查到源实体/原文。</li>
+<li><code>Recommendation</code>、<code>DiagnosticRule</code>、<code>Table</code>、<code>Figure</code>、<code>Reference</code> 是结构化源实体。</li>
+<li><code>EvidenceUnit</code> 是检索投影，同一个源实体可以生成 0、1 或多个 EvidenceUnit。</li>
+<li><code>doc_summary</code> 与 <code>section_summary</code> 是 Document / Section 的路由投影，不属于 EvidenceUnit 层。</li>
+</ul>
 <hr></div>
         </details>
       </div>
@@ -558,6 +644,12 @@
 <td style="text-align:left">诊断标准 / 风险分层规则</td>
 <td style="text-align:left">80–300</td>
 <td style="text-align:left">规则匹配与可解释诊断</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>figure_context</code></td>
+<td style="text-align:left">诊断流程图 / 风险分层图 / 图注 OCR</td>
+<td style="text-align:left">80–500</td>
+<td style="text-align:left">图像类临床证据的文本化检索投影</td>
 </tr>
 </tbody></table></div></div>
         </details>
@@ -826,7 +918,7 @@
           <div class="section-body"><p>目标：在候选章节内召回可引用的最小证据单元，输出 <code>candidate_unit_ids</code>。</p>
 <p>输入索引：</p>
 <ul>
-<li>EvidenceUnit 主表与索引：<code>paragraph / table / table_row / recommendation / diagnostic_rule</code>。</li>
+<li>EvidenceUnit 主表与索引：<code>paragraph / recommendation / diagnostic_rule / table / table_row / figure_context</code>。</li>
 <li>元数据：<code>doc_id</code>, <code>section_id</code>, <code>unit_type</code>, <code>page</code>, <code>diseases</code>, <code>target_population</code>, <code>evidence_grade</code>, <code>sensitivity_level</code>。</li>
 </ul>
 <p>流程：</p>
